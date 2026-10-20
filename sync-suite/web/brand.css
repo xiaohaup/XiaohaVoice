@@ -1,0 +1,19 @@
+/* A single silhouette inherits the selected theme in both local and sync views. */
+.brand .voice-logo {
+  display:inline-block;
+  position:relative;
+  flex:0 0 40px;
+  width:40px;
+  height:40px;
+  border-radius:12px;
+  background:var(--soft,var(--tint));
+  color:var(--accent);
+}
+.brand .voice-logo::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  background:currentColor;
+  -webkit-mask:url('/assets/voice-glyph.svg') center/contain no-repeat;
+  mask:url('/assets/voice-glyph.svg') center/contain no-repeat;
+}

@@ -1,0 +1,1 @@
+a40afd52a6ed7a2ccd07df7d7e9751731b84c7273266e3d5445c8ffe75ac5bcf  XiaohaVoice-0.3.8-macOS-arm64-build12-public.zip

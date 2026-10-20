@@ -1,0 +1,22 @@
+{
+  "public_asset": "XiaohaVoice-0.3.8-macOS-arm64-build12-public.zip",
+  "bytes": 42844711,
+  "sha256": "a40afd52a6ed7a2ccd07df7d7e9751731b84c7273266e3d5445c8ffe75ac5bcf",
+  "original_asset_sha256": "a34cce31fe93469d9b70505486a8fb1bf45c7492eab7b47befae80874f330386",
+  "original_private_asset_untouched": true,
+  "cleaned_metadata_keys": [
+    "BridgeRoot",
+    "PrototypeRoot"
+  ],
+  "changed_members": [
+    "小哈语音.app/Contents/Info.plist",
+    "小哈语音.app/Contents/MacOS/XiaohaVoice",
+    "备份清单.json"
+  ],
+  "unsigned_native_payload_identical": true,
+  "signature_verified": true,
+  "components_unchanged": true,
+  "personal_records": 0,
+  "network_used": false,
+  "app_launched": false
+}

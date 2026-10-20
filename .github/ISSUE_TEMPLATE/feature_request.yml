@@ -1,0 +1,16 @@
+name: 功能建议
+description: 说明使用场景和希望减少的操作。
+title: "[Feature] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 希望解决的具体场景
+      description: 请描述现在怎样操作、哪里不方便，以及预期怎样使用。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你的建议
+      description: 新功能进入新版本，不追加到两个基础保留标签。

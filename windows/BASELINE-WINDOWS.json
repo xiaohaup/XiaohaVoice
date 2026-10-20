@@ -1,0 +1,25 @@
+{
+  "version": "0.4.0-preview.1",
+  "revision": "winfix6",
+  "baseline_date": "2026-10-21",
+  "platform": "Windows-x64",
+  "tag": "windows-v0.4.0-preview.1-winfix6-20261021",
+  "installed_exe_sha256": "9bc6f46f8a3b5334b4d51ac35ae06b5d123b8b57bae70018f01ea496ae20107c",
+  "original_maintenance_source_sha256": "5281653d89f9ea515b54b483ca551ebcd4daa77c971a4393dd37eddad531f2aa",
+  "upstream_source_sha256": "7d28087d8d0f6b37c5b36ad722eeca63c6db38dda2ecd65ff4a9597c83bde7f7",
+  "runtime_source_changes": false,
+  "packaging_only_changes": [
+    "README.md",
+    "dependencies.lock.json",
+    "prepare_components.py upstream hash only",
+    "package_source.py omit old task document",
+    "upstream/source.zip omit 00_TASK.md",
+    "upstream/source-manifest.json"
+  ],
+  "validation": {
+    "windows_passed": 76,
+    "skipped": 1,
+    "common_passed": 33,
+    "real_microphone_acceptance": "per-user confirmation required"
+  }
+}

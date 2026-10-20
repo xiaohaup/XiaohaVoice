@@ -1,0 +1,19 @@
+# Project-local Windows build environment; no global install.
+PySide6==6.12.0
+PyInstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+zstandard==0.25.0
+pytest==9.1.1
+certifi==2026.10.18
+tzdata==2026.5
+fastapi==0.143.5
+uvicorn==0.54.0
+cryptography==50.0.2
+httpx==0.28.1
+keyring==25.7.0
+jieba==0.42.1
+websockets==15.0.1
+requests==2.34.2
+python-socks==2.8.2
+socksio==1.0.0
+PySocks==1.7.1

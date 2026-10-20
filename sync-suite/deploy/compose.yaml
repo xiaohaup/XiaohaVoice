@@ -1,0 +1,19 @@
+services:
+  sync:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://127.0.0.1:8765}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-0}
+      SIGNUP_CODE: ${SIGNUP_CODE:-}
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - sync-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+volumes:
+  sync-data:

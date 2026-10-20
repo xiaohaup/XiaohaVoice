@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-21",
+  "platform": "macOS-arm64",
+  "version": "0.3.8",
+  "build": "12",
+  "installed_to_release_comparison": {
+    "files": 65,
+    "mismatches": []
+  },
+  "original_distribution": {
+    "manifest_files": 301,
+    "data_files": [
+      "Data/.keep"
+    ],
+    "sha256": "a34cce31fe93469d9b70505486a8fb1bf45c7492eab7b47befae80874f330386"
+  },
+  "isolated_source_build": {
+    "exit_code": 0,
+    "app_launched": false,
+    "runtime_selfcheck": {
+      "runtime": true,
+      "opus": true,
+      "network_called": false,
+      "microphone_opened": false
+    }
+  },
+  "offline_tests": {
+    "passed": 103,
+    "failed": 0,
+    "warnings": 1,
+    "warning_note": "Existing FastAPI/Starlette httpx deprecation; no test failures."
+  },
+  "personal_data_in_repository": false,
+  "live_application_restarted": false,
+  "permissions_changed": false,
+  "limits": [
+    "No new microphone, live network ASR, or target-application tests were performed for the freeze.",
+    "Windows baseline tracked separately."
+  ]
+}

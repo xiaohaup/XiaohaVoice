@@ -1,0 +1,17 @@
+/* Reserve one fixed gutter. Native scrollers never change the content width. */
+:root{--scrollbar-size:10px;--scrollbar-thumb:#ad9477;--scrollbar-thumb-active:#806349}
+:root[data-theme="mint"]{--scrollbar-thumb:#94a382;--scrollbar-thumb-active:#60794f}
+:root[data-theme="ink"]{--scrollbar-thumb:#8fa8ba;--scrollbar-thumb-active:#5e7e95}
+html,body{height:100%;overflow:hidden!important;scrollbar-gutter:auto}
+#page-scroll{height:100vh;height:100dvh;overflow-y:auto;overflow-x:hidden;box-sizing:border-box;border-right:var(--scrollbar-size) solid transparent;scrollbar-gutter:auto}
+body.embedded-sync #page-scroll{height:auto;overflow:visible;border-right:0}
+body.embedded-sync{height:auto;overflow:visible!important}
+*{scrollbar-width:none!important;scrollbar-color:transparent transparent!important}
+::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+.runtime-log-list,.select-menu,#application-details{border-right:var(--scrollbar-size) solid transparent}
+.xh-scroll-track{position:fixed;width:var(--scrollbar-size);z-index:95;background:transparent;touch-action:none;pointer-events:none;opacity:0;transition:opacity .18s;outline:none}
+.xh-scroll-track.is-scrolling,.xh-scroll-track:focus-visible,.xh-scroll-track.is-dragging{opacity:1;pointer-events:auto}
+.xh-scroll-thumb{position:absolute;width:5px;left:2px;top:0;border-radius:999px;background:var(--scrollbar-thumb)}
+.xh-scroll-track:hover .xh-scroll-thumb,.xh-scroll-track.is-dragging .xh-scroll-thumb{background:var(--scrollbar-thumb-active)}
+@media(prefers-reduced-motion:reduce){.xh-scroll-track{transition:none}}

@@ -1,0 +1,33 @@
+name: 问题反馈
+description: 报告可复现的问题，请勿提交私人资料。
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 程序版本与修订号
+      placeholder: "例如 macOS 0.3.8 build 12 / Windows winfix6"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: 系统与设备架构
+      placeholder: "例如 macOS 14+ Apple Silicon / Windows 11 x64"
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: 识别通道
+      options:
+        - 豆包输入法兼容通道
+        - 火山引擎 API
+        - 与识别无关
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤、预期与实际结果
+      description: 请使用示例文字。不要上传API密钥、个人备份、原音或私人聊天。
+    validations:
+      required: true

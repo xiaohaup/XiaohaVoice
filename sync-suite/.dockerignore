@@ -1,0 +1,10 @@
+.venv
+private
+reports
+tests
+dist
+**/__pycache__
+.env
+*.key
+*.sqlite3*
+desktop

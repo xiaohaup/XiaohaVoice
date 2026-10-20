@@ -1,0 +1,27 @@
+/* Shared field focus: decorate the existing border, never a second inner box. */
+input:not([type=checkbox]):not([type=radio]),textarea,select,.select-trigger,.search-control {
+  transition:border-color .12s,box-shadow .12s;
+}
+input:not([type=checkbox]):not([type=radio]):focus,textarea:focus,select:focus,.select-trigger:focus,.select-trigger:focus-visible {
+  outline:none;
+  border-color:color-mix(in srgb,var(--accent) 70%,var(--line));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent);
+}
+.search-control:focus-within {
+  border-color:color-mix(in srgb,var(--accent) 70%,var(--line));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent);
+}
+.search-control input,.search-control input:focus,#history-query:focus-visible {
+  -webkit-appearance:none;
+  appearance:none;
+  border:0;
+  outline:none;
+  box-shadow:none;
+  background:transparent;
+  border-radius:0;
+  min-width:0;
+}
+.credential-control:focus-within input {
+  border-color:color-mix(in srgb,var(--accent) 70%,var(--line));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent);
+}
