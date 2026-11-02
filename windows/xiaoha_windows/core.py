@@ -67,6 +67,12 @@ class Session:
     activity: Activity = field(default_factory=Activity)
     text: str = ''
     original_text: str = ''
+    english_configuration: dict | None = None
+    english_phase: str = ''
+    english_text: str = ''
+    english_error: str = ''
+    english_generation: int = 0
+    english_retry_copies_only: bool = False
     recording: bool = True
     complete: bool = False
     cancelled: bool = False
@@ -88,6 +94,10 @@ class Session:
     def seconds(self): return len(self.pcm)/32000 if self.pcm else self.completed_seconds
     @property
     def has_text(self): return bool(self.text.strip())
+    @property
+    def english_pending(self): return self.english_phase in ('waiting','translating') and not self.failure
+    @property
+    def output_text(self): return self.english_text if self.english_phase=='ready' else self.text
 
     def append(self, pcm):
         if not self.recording: return
@@ -101,6 +111,7 @@ class Session:
 
     def cancel(self):
         self.generation += 1; self.completed_seconds = self.seconds
+        self.english_generation += 1; self.english_phase='cancelled'; self.english_text=''; self.english_error=''
         self.cancelled = self.complete = True; self.recording = self.retrying = self.ready = False
         self.pcm.clear(); self.text = ''; self.failure = None; self.target = None
 
@@ -122,9 +133,9 @@ class Deliveries:
         if self.busy: return None
         while self.ids:
             sid = self.ids[0]; session = sessions.get(sid)
-            if not session or session.cancelled or session.failure:
+            if not session or session.cancelled or session.failure or session.english_phase in ('failed','cancelled'):
                 self.ids.popleft(); continue
-            if not session.complete or not session.target_ready: return None
+            if not session.complete or session.english_pending or not session.target_ready: return None
             self.busy = True; return sid
         return None
     def finish(self, sid):
@@ -135,6 +146,12 @@ class Deliveries:
 
 class History:
     def __init__(self, directory): self.path = Path(directory)/'history.json'
+    def associate_english(self,sid,text):
+        rows=load_json(self.path,[])
+        if not isinstance(rows,list):raise ValueError('历史格式异常')
+        for row in rows:
+            if str(row.get('id','')).casefold()==sid.casefold():
+                row['english']=text;atomic_json(self.path,rows);return
     def add(self, session, text, original=''):
         rows = load_json(self.path, [])
         if not isinstance(rows, list): raise ValueError('历史格式异常，原文件未覆盖')
@@ -228,6 +245,22 @@ class Gesture:
         trigger = vk == self.shortcut.key and self.armed and not self.interrupted
         if vk == self.shortcut.key: self.armed = False
         return trigger
+
+class EnglishGesture(Gesture):
+    """Only a short, unaccompanied ending gesture; not a second start key."""
+    def __init__(self,shortcut=None,clock=None):
+        super().__init__(shortcut);self.clock=clock or __import__('time').monotonic;self.started=0.0
+    def mouse(self,button,down):
+        if not self.shortcut.mouse or button!=self.shortcut.mouse:
+            if down:self.interrupted=True
+            return False
+        if down:self.started=self.clock();self.armed=True;self.interrupted=False;return False
+        result=self.armed and not self.interrupted and self.clock()-self.started<=.55
+        self.armed=False;return result
+    def key(self,vk,down,injected=False):
+        if down and vk==self.shortcut.key and vk not in self.pressed:self.started=self.clock()
+        result=super().key(vk,down,injected)
+        return result and self.clock()-self.started<=.55
 
 
 class PCM16Converter:

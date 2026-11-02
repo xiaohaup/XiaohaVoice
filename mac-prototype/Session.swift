@@ -41,6 +41,12 @@ enum RecognitionEnding {case empty,failed}
 enum UnfinishedDisposition {case waitForStop,closeQuietly,retain}
 
 final class VoiceSession {
+    var englishConfiguration:VoiceEnglishConfiguration?
+    var englishRevision:String?
+    var englishOutput:VoiceEnglishOutput?
+    var englishRetryCopiesOnly=false
+    var translationPending:Bool {englishRevision != nil && failure==nil && (englishOutput==nil || englishOutput!.pending)}
+    var outputText:String {englishOutput?.text ?? text}
     var applicationName:String?
     let id:UUID
     let createdAt:Date
@@ -79,6 +85,6 @@ final class VoiceSession {
     func captureDidEnd() { captureEnded = true }
     func connectionFailed(_ message:String) { bridgeReady=false;failure=message }
     func beginRetry() { generation += 1;bridgeReady=false;sentOffset=0;stopSent=false;failure=nil }
-    func cancel(){generation+=1;recording=false;captureEnded=true;complete=true;completedSeconds=seconds;bridgeReady=false;failure=nil;text="";pasteTarget=nil;pcm.removeAll()}
+    func cancel(){englishOutput?.cancel();englishRevision=nil;generation+=1;recording=false;captureEnded=true;complete=true;completedSeconds=seconds;bridgeReady=false;failure=nil;text="";pasteTarget=nil;pcm.removeAll()}
     func finish(_ result:String) { text=result;completedSeconds=seconds;complete=true;bridgeReady=false;failure=nil;pcm.removeAll() }
 }

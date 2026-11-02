@@ -5,7 +5,7 @@ from ctypes import wintypes as W
 from dataclasses import dataclass
 from pathlib import Path
 import os, threading
-from .core import Gesture, Shortcut, MODIFIER_KEYS
+from .core import Gesture, EnglishGesture, Shortcut, MODIFIER_KEYS
 
 
 @dataclass(frozen=True)
@@ -196,6 +196,7 @@ class Hooks:
     def __init__(self, windows, emit):
         self.windows = windows; self.emit = emit; self.gesture = Gesture()
         self.suspended = False; self.recording = False; self.capture_mouse = False
+        self.english_enabled=False;self.english_gesture=EnglishGesture(Shortcut(163,0,'右 Ctrl'));self.translation_waiting=False
         self.thread_id = None; self.running = False; self.thread = None
         self.blocked_keys=set()
     def start(self):
@@ -233,9 +234,18 @@ class Hooks:
                     if not down: self.blocked_keys.discard(vk)
                     member = vk == config.key or bool(MODIFIER_KEYS.get(vk,0)&config.modifiers)
                     if not self.suspended:
-                        if vk == 27 and self.recording:
+                        if vk == 27 and (self.recording or self.translation_waiting):
                             if down: self.blocked_keys.add(vk); self.emit('cancel',None)
                             return 1
+                        if self.recording and self.english_enabled:
+                            ending=self.english_gesture.shortcut
+                            fired=self.english_gesture.key(vk,down)
+                            if fired:self.emit('stopEnglish',self.windows.capture(False))
+                            # Observe modifier endings rather than swallowing a
+                            # Ctrl/Shift down: Ctrl+C/V must remain usable.
+                            if vk==ending.key and vk not in MODIFIER_KEYS and (self.english_gesture.armed or fired):
+                                if down:self.blocked_keys.add(vk)
+                                return 1
                         if down and not member: self.windows.revision += 1
                         trigger = self.gesture.key(vk,down)
                         if trigger: self.emit('toggle',self.windows.capture(False))
@@ -253,6 +263,12 @@ class Hooks:
                     if button and self.capture_mouse:
                         if message == 0x20C: self.emit('mouseShortcut',{'keyCode':0,'modifiers':0,'mouseButton':button,'label':'鼠标侧键 '+str(button-3)})
                         return 1
+                    if not self.suspended and self.recording and self.english_enabled:
+                        ending=self.english_gesture.shortcut
+                        if button and button==ending.mouse:
+                            if self.english_gesture.mouse(button,message==0x20B):self.emit('stopEnglish',self.windows.capture(False))
+                            return 1
+                        if message in (0x201,0x204,0x207,0x20A,0x20B,0x20E):self.english_gesture.mouse(button,True)
                     if not self.suspended and button and button == self.gesture.shortcut.mouse:
                         if message == 0x20C: self.emit('toggle',self.windows.capture(False))
                         return 1

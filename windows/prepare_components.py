@@ -5,6 +5,13 @@ from pathlib import Path
 import argparse,hashlib,json,re,zipfile
 UPSTREAM_SHA256='7d28087d8d0f6b37c5b36ad722eeca63c6db38dda2ecd65ff4a9597c83bde7f7'
 ROOT=Path(__file__).resolve().parent
+PREVIEW_OVERLAY=[
+    'sync-suite/desktop/workbench.py','sync-suite/desktop/voice_translation.py',
+    'sync-suite/desktop/asr_settings.py','sync-suite/desktop/client.py',
+    'sync-suite/web/workbench.html','sync-suite/web/workbench.js',
+    'sync-suite/web/voice-english.js','sync-suite/web/voice-english.css',
+    'ime-channel-test/channel_probe.py',
+]
 
 def prepare(source, output):
     source,output=Path(source),Path(output)
@@ -24,6 +31,15 @@ def prepare(source, output):
             if destination:
                 if not destination.resolve().is_relative_to(output.resolve()): raise ValueError('源码路径无效')
                 destination.parent.mkdir(parents=True,exist_ok=True); destination.write_bytes(payload)
+    # This preview overlays only the independently maintained voice/translation
+    # files. The original archive and its manifest remain immutable.
+    for name in PREVIEW_OVERLAY:
+        relative=name.removeprefix('sync-suite/') if name.startswith('sync-suite/') else name.removeprefix('ime-channel-test/')
+        destination=output/('Components/workbench' if name.startswith('sync-suite/') else 'Components/engine')/relative
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        source_file=ROOT.parent/name
+        if not source_file.is_file():source_file=ROOT/'shared-preview'/name
+        destination.write_bytes(source_file.read_bytes())
     engine=output/'Components/engine/channel_probe.py'
     text=engine.read_text(encoding='utf-8').replace('os.fchmod(f.fileno(),0o600)',"\n        if hasattr(os,'fchmod'): os.fchmod(f.fileno(),0o600)")
     engine.write_text(text,encoding='utf-8')
@@ -62,12 +78,18 @@ def restore_data(archive,data):
     text=text.replace("(s[key]?'已允许':'待允许')","(key==='microphone'?(s[key]?'检测到输入设备':'未发现输入设备'):key==='input_monitoring'?(s[key]?'已启用':'未启用'):'适用于普通权限窗口')")
     text=text.replace("row.append(make('span',name+' · '","if(key==='microphone')b.textContent='系统设置';else b.hidden=true;row.append(make('span',name+' · '")
     script.write_text(text,encoding='utf-8')
+    english=web/'voice-english.js';text=english.read_text(encoding='utf-8')
+    for old,new in [('0x20000','4'),('0x40000','2'),('0x80000','1'),('0x100000','8')]:text=text.replace(old,new)
+    text=text.replace("keyCode:54,modifiers:0,label:'右 Command'","keyCode:163,modifiers:0,label:'右 Ctrl'")
+    text=text.replace("'Control'","'Ctrl'").replace("'Option'","'Alt'").replace("'Command'","'Win'")
+    english.write_text(text,encoding='utf-8')
     html=web/'workbench.html';text=html.read_text(encoding='utf-8').replace('右 Option','右 Alt').replace('Option / Command / Shift','Alt / Win / Shift').replace('在 Dock 中显示','在任务栏显示').replace('菜单栏','系统托盘')
     text=text.replace('Control 留给原输入法；请避开其他软件已绑定的键。','右 Alt 可能与 AltGr 冲突，可换用功能键或鼠标侧键。').replace('系统权限','系统与输入状态').replace('只在这里管理系统授权。','自动粘贴受 Windows 窗口权限限制。')
     text=text.replace('废纸篓','回收站').replace('钥匙串','Windows凭据管理器')
+    text=text.replace('右 Command','右 Ctrl').replace('⌘C / ⌘V','Ctrl+C / Ctrl+V')
     html.write_text(text,encoding='utf-8')
     (output/'Data').mkdir(exist_ok=True)
-    (output/'toolkit.json').write_text(json.dumps({'format':1,'name':'小哈语音','version':'0.4.0-preview.1','platform':'Windows-x64','data':'Data','cloud_deployed':False},ensure_ascii=False,indent=2),encoding='utf-8')
+    (output/'toolkit.json').write_text(json.dumps({'format':1,'name':'小哈语音','version':'0.4.1-preview.1','platform':'Windows-x64','data':'Data','cloud_deployed':False},ensure_ascii=False,indent=2),encoding='utf-8')
     return output
 
 def main():

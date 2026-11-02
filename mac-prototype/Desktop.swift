@@ -4,7 +4,7 @@ import CryptoKit
 
 // A LaunchAgent opens the app through LaunchServices, then exits. Disabling it never kills a recording.
 final class LoginLaunch {
-    let label="com.xiaoha.voice.login"
+    let label="com.xiaoha.voice.standalone.login"
     let bundle:URL
     var path:URL {FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(label).plist")}
     init(bundle:URL=Bundle.main.bundleURL){self.bundle=bundle.resolvingSymlinksInPath()}
@@ -43,7 +43,7 @@ final class LoginLaunch {
 
 final class DesktopWorkbench:NSObject,NSWindowDelegate,WKNavigationDelegate,WKScriptMessageHandlerWithReply {
     let root:URL,history:URL,login=LoginLaunch()
-    let origin="http://127.0.0.1:8766"
+    let origin="http://127.0.0.1:18766"
     var window:NSWindow?,web:WKWebView?,process:Process?
     var launching=false,pendingPath="/workbench",deadline=Date.distantPast
     var state:(()->[String:Any])?
@@ -91,7 +91,7 @@ final class DesktopWorkbench:NSObject,NSWindowDelegate,WKNavigationDelegate,WKSc
                     let python=RuntimePaths.executable ?? self.root.appendingPathComponent(".venv/bin/python")
                     guard FileManager.default.isExecutableFile(atPath:python.path) else {self.fail("本机运行环境缺失，语音录音仍可使用。请恢复同步组件后重新打开。");return}
                     let p=Process();p.executableURL=python;p.currentDirectoryURL=self.root
-                    p.arguments=(RuntimePaths.executable != nil ? ["control"] : ["-m","desktop.control"])+["--no-browser","--data",self.dataDirectory.path,"--history",self.history.path,"--wordbook",self.history.deletingLastPathComponent().appendingPathComponent("sync-wordbook.json").path]
+                    p.arguments=(RuntimePaths.executable != nil ? ["control"] : ["-m","desktop.control"])+["--no-browser","--port","18766","--data",self.dataDirectory.path,"--history",self.history.path,"--wordbook",self.history.deletingLastPathComponent().appendingPathComponent("sync-wordbook.json").path]
                     p.environment=RuntimePaths.environment
                     p.standardOutput=FileHandle.nullDevice;p.standardError=FileHandle.nullDevice
                     do {try p.run();self.process=p} catch {self.fail("工作台未能启动，原有语音与历史没有改变。请从菜单栏重试。");return}
@@ -128,12 +128,12 @@ final class DesktopWorkbench:NSObject,NSWindowDelegate,WKNavigationDelegate,WKSc
     func webView(_ webView:WKWebView,decidePolicyFor navigationAction:WKNavigationAction,decisionHandler:@escaping(WKNavigationActionPolicy)->Void) {
         guard let url=navigationAction.request.url else{decisionHandler(.cancel);return}
         if url.scheme=="about" {decisionHandler(.allow);return}
-        if url.scheme=="http",url.host=="127.0.0.1",url.port==8766 {decisionHandler(.allow);return}
+        if url.scheme=="http",url.host=="127.0.0.1",url.port==18766 {decisionHandler(.allow);return}
         if navigationAction.navigationType == .linkActivated,["https","http"].contains(url.scheme ?? "") {NSWorkspace.shared.open(url)}
         decisionHandler(.cancel)
     }
     func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void) {
-        guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.protocol=="http",message.frameInfo.securityOrigin.host=="127.0.0.1",message.frameInfo.securityOrigin.port==8766,web?.url?.path=="/workbench",let body=message.body as? [String:Any],let command=body["action"] as? String else {replyHandler(nil,"此操作只能从本机工作台发起");return}
+        guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.protocol=="http",message.frameInfo.securityOrigin.host=="127.0.0.1",message.frameInfo.securityOrigin.port==18766,web?.url?.path=="/workbench",let body=message.body as? [String:Any],let command=body["action"] as? String else {replyHandler(nil,"此操作只能从本机工作台发起");return}
         switch command {
         case "backupToolkit":toolkit?.backup(reply:replyHandler)
         case "chooseRestore":toolkit?.chooseRestore(reply:replyHandler)

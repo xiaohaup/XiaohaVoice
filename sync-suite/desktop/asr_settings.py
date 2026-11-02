@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import threading
 import uuid
 
-SERVICE = 'com.xiaoha.voice.asr'
+SERVICE = 'com.xiaoha.voice.standalone.asr'
 ACCOUNT = 'volcengine-streaming'
 DEFAULT = {'provider': 'ime', 'auth': 'api_key', 'app_id': '', 'resource': 'volc.seedasr.sauc.duration', 'second_pass': True, 'diagnostics': False}
 RESOURCES = ('volc.seedasr.sauc.duration', 'volc.seedasr.sauc.concurrent')

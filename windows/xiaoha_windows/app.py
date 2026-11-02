@@ -17,6 +17,7 @@ from .win32 import Windows,Clipboard
 class Controller(QObject):
     hook_event = Signal(str,object)
     work_finished = Signal(str,object)
+    english_finished = Signal(str,int,object)
     def __init__(self, application, root, startup=False):
         super().__init__(); self.app = application; self.root = Path(root); self.data = self.root/'Data'
         self.data.mkdir(parents=True,exist_ok=True)
@@ -24,6 +25,8 @@ class Controller(QObject):
         self.settings = {**{'silent_startup':True,'show_dock':True,'shortcut':{'keyCode':165,'modifiers':0,'label':'右 Alt'}},**load_json(self.settings_path,{})}
         self.windows = Windows(); self.sessions = {}; self.active = None; self.displayed = None; self.closed = False
         self.deliveries = Deliveries(); self.bridges = {}; self.retired_bridges = set(); self.exit_timers = {}; self.worker = ThreadPoolExecutor(max_workers=1)
+        self.english_workers=ThreadPoolExecutor(max_workers=2,thread_name_prefix='English');self.english_clients={}
+        self.english_finished.connect(self.english_done)
         self.history = History(self.data); self.recovery = Recovery(self.data)
         completed = [r['id'] for r in load_json(self.history.path,[])]
         restored,self.recovery_issues = self.recovery.load(completed)
@@ -51,7 +54,7 @@ class Controller(QObject):
         self.start_server(); self.health_timer.start(250)
         self.single = QLocalServer(self); self.single.newConnection.connect(self.receive_activation)
         self.single.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
-        self.single.listen('XiaohaVoice-Desktop')
+        self.single.listen('XiaohaVoice-Standalone-Desktop')
         if not startup or not self.settings['silent_startup']: self.window.activate()
     def _origin(self):
         with socket.socket() as probe:
@@ -88,8 +91,16 @@ class Controller(QObject):
         if not all(type(x) is int for x in (result.key,result.modifiers,result.mouse)) or not result.validate() or not isinstance(result.label,str) or len(result.label)>100:
             raise ValueError('请选择单侧修饰键、功能键、组合键或鼠标侧键')
         return result
+    @staticmethod
+    def same_shortcut(a,b):return (a.key,a.modifiers,a.mouse)==(b.key,b.modifiers,b.mouse)
+    def decode_english_shortcut(self,value):
+        result=self.decode_shortcut(value)
+        if (result.key in (91,92,164,165) and not result.modifiers) or result.modifiers&8:
+            raise ValueError('翻译结束请选Ctrl、Shift、功能键或鼠标侧键，避开Alt或Win系统菜单')
+        return result
     def on_hook(self,kind,value):
         if kind == 'toggle': self.toggle(value)
+        elif kind == 'stopEnglish': self.stop_english(value)
         elif kind == 'cancel': self.cancel()
         elif kind == 'mouseShortcut': self.window.mouse_shortcut(value)
     def toggle(self,target=None):
@@ -99,6 +110,11 @@ class Controller(QObject):
         if asr.get('provider','ime') == 'ime' and not (self.data/'recognition/device.json').is_file():
             self.open_section('asr'); self.tray.showMessage('小哈语音','首次使用请在识别服务里初始化这台设备。'); return
         session = Session(); self.sessions[session.id] = session; self.active = self.displayed = session
+        from .core import EnglishGesture
+        config=self.english_config()
+        if config and not self.same_shortcut(self.decode_english_shortcut(config['shortcut']),self.hooks.gesture.shortcut):session.english_configuration=config
+        self.hooks.english_enabled=bool(session.english_configuration)
+        if session.english_configuration:self.hooks.english_gesture=EnglishGesture(self.decode_shortcut(config['shortcut']))
         self.capsule.preview_until = 0; self.hooks.recording = True
         try: self.capture.start(); self.connect(session); self.diagnostic('capture',phase='start')
         except Exception:
@@ -122,6 +138,46 @@ class Controller(QObject):
         elif session.failure: self.resolve_failure(session,'failed')
         else: self.flush(session)
         self.tick()
+    def english_config(self):
+        config=load_json(self.data/'translation-settings.json',{})
+        try:
+            if config.get('enabled') is True and config.get('credential_saved') and config.get('revision') and config.get('endpoint') and config.get('model'):
+                self.decode_english_shortcut(config['shortcut']);return config
+        except (ValueError,KeyError,TypeError):pass
+        return None
+    def stop_english(self,target=None):
+        session=self.active
+        if not session or not session.english_configuration:return
+        session.english_phase='waiting';self.stop(target or self.windows.capture())
+    def translate_english(self,session):
+        if not session.complete or not session.english_configuration or session.english_phase=='cancelled':return
+        from .translation import LocalEnglishClient
+        session.english_generation+=1;generation=session.english_generation;session.english_phase='translating';session.english_error=''
+        client=LocalEnglishClient(self.origin,self.data/'desktop');self.english_clients[session.id]=client
+        source=session.text;revision=session.english_configuration['revision']
+        def run():
+            try:result=client.translate(source,revision)
+            except ValueError as exc:result={'ok':False,'error':str(exc)}
+            try:self.english_finished.emit(session.id,generation,result)
+            except RuntimeError:pass
+        self.english_workers.submit(run)
+    def english_done(self,sid,generation,result):
+        session=self.sessions.get(sid)
+        if self.closed or not session or session.english_generation!=generation or session.english_phase!='translating':return
+        self.english_clients.pop(sid,None)
+        if result.get('ok') and isinstance(result.get('text'),str) and result['text'].strip():
+            session.english_text=result['text'];session.english_phase='ready'
+            try:self.history.associate_english(sid,session.english_text);self.window.announce_history()
+            except (ValueError,OSError):self.toolkit_status='英文已生成，原文保留；译文历史暂未保存'
+        else:
+            session.english_phase='failed';session.english_error=str(result.get('error') or '翻译未完成，原文已保留')[:500]
+            session.delivery=session.english_error
+        self.drain();self.tick()
+    def cancel_english(self,session):
+        session.english_generation+=1;session.english_phase='cancelled';session.delivery='已取消翻译，原文已保留'
+        client=self.english_clients.pop(session.id,None)
+        if client:client.cancel()
+        self.drain()
     def _captured_field(self,session,token):
         session.local_token = token if isinstance(token,str) else None; session.target_ready=True; self.drain()
     def audio(self,data):
@@ -157,7 +213,9 @@ class Controller(QObject):
             elif session.has_text:
                 try:
                     text=session.text; self.history.add(session,text,session.original_text); session.finish(text)
-                    self.window.announce_history(); self.drain()
+                    self.window.announce_history()
+                    if session.english_phase=='waiting':self.translate_english(session)
+                    self.drain()
                     if session.id not in self.deliveries.ids: self.hide_if_current(session,1000)
                     # The old recoverable source remains until saved text is durable; then it goes to Recycle Bin.
                     try: self.recovery.discard(session.id,self.windows.trash)
@@ -197,13 +255,15 @@ class Controller(QObject):
             bridge=self.bridges.pop(session.id,None)
             if bridge: self.retired_bridges.add(bridge); bridge.cancel()
             session.cancel(); self.drain()
+        elif self.displayed and self.displayed.english_pending:self.cancel_english(self.displayed)
         self.capsule.preview_until=0; self.capsule.hide()
     def hide_if_current(self,session,delay):
         QTimer.singleShot(delay,lambda:self.capsule.hide() if not self.active and self.displayed is session else None)
     def tick(self):
         self.reap_bridges()
         for session in list(self.sessions.values()): self.flush(session)
-        self.capsule.busy=bool(self.active or any(not s.complete and not s.failure for s in self.sessions.values()))
+        self.capsule.busy=bool(self.active or any((not s.complete or s.english_pending) and not s.failure for s in self.sessions.values()))
+        self.hooks.translation_waiting=bool(self.displayed and self.displayed.english_pending)
         self.capsule.update_session(self.displayed,self.hooks.gesture.shortcut.label)
         self.drain()
         self.prune_sessions()
@@ -228,6 +288,7 @@ class Controller(QObject):
     def deliver(self,session,started):
         from desktop.runtime_settings import RuntimeSettings
         settings=RuntimeSettings(self.data).load()
+        if session.english_retry_copies_only:settings['auto_paste']=False
         if settings['auto_paste'] and self.windows.modifiers_down() and time.monotonic()-started<.8:
             QTimer.singleShot(15,lambda:self.deliver(session,started)); return
         def finish(message):
@@ -239,11 +300,11 @@ class Controller(QObject):
             def inserted(ok):
                 copied=False
                 if settings['keep_transcription'] or not ok:
-                    try: self.clipboard.stage(session.text,True); copied=True
+                    try: self.clipboard.stage(session.output_text,True); copied=True
                     except (ValueError,OSError): pass
                 finish('已粘贴到本机输入框' if ok else '文字已复制，请重新点击输入框' if copied else '文字已保留，请重新点击输入框')
-            self.window.insert(session.local_token,session.text,inserted); return
-        try: token=self.clipboard.stage(session.text,settings['keep_transcription'] or not settings['auto_paste'])
+            self.window.insert(session.local_token,session.output_text,inserted); return
+        try: token=self.clipboard.stage(session.output_text,settings['keep_transcription'] or not settings['auto_paste'])
         except (ValueError,OSError) as exc: finish(str(exc)); return
         if not settings['auto_paste']: finish('已复制到剪贴板'); return
         if not session.target or session.target.pid==os.getpid() or not self.windows.matches(session.target):
@@ -263,11 +324,16 @@ class Controller(QObject):
                 self.paste_test_status='原剪贴板恢复未完成，暂存在本次进程内；转写文字已保留。'
         QTimer.singleShot(delay,restore)
     def copy_displayed(self):
-        if self.displayed and self.displayed.has_text: self.clipboard.stage(self.displayed.text,True)
+        if self.displayed and self.displayed.has_text: self.clipboard.stage(self.displayed.output_text,True)
     def retry_displayed(self):
         if self.displayed: self.retry(self.displayed.id)
     def retry(self,sid):
         session=self.sessions.get(str(UUID(sid)).upper())
+        if session and session.complete and session.english_phase=='failed':
+            config=self.english_config()
+            if not config:raise ValueError('请先保存并开启英文输出')
+            session.english_configuration=config;session.english_retry_copies_only=True;session.delivery=''
+            self.deliveries.append(session.id);self.translate_english(session);self.displayed=session;self.capsule.present();return
         if self.active or not session or session.complete or session.recording or session.retrying or not session.pcm: raise ValueError('请结束录音，或等待当前重试完成')
         session.retry(); self.connect(session); self.displayed=session; self.capsule.present()
     def open_section(self,section):
@@ -276,7 +342,7 @@ class Controller(QObject):
         import winreg
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
-                value,_=winreg.QueryValueEx(key,'XiaohaVoice')
+                value,_=winreg.QueryValueEx(key,'XiaohaVoiceStandalone')
             return value == self.startup_command()
         except FileNotFoundError: return False
     def startup_command(self):
@@ -286,14 +352,14 @@ class Controller(QObject):
         import winreg
         command=self.startup_command()
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
-            if enabled: winreg.SetValueEx(key,'XiaohaVoice',0,winreg.REG_SZ,command)
+            if enabled: winreg.SetValueEx(key,'XiaohaVoiceStandalone',0,winreg.REG_SZ,command)
             else:
                 try:
-                    previous,_=winreg.QueryValueEx(key,'XiaohaVoice')
-                    if previous == command: winreg.DeleteValue(key,'XiaohaVoice')
+                    previous,_=winreg.QueryValueEx(key,'XiaohaVoiceStandalone')
+                    if previous == command: winreg.DeleteValue(key,'XiaohaVoiceStandalone')
                 except FileNotFoundError: pass
     def async_work(self,label,function):
-        if self.toolkit_busy or self.active or any(not s.complete and not s.failure for s in self.sessions.values()): raise ValueError('请结束录音并等待识别或本机操作完成')
+        if self.toolkit_busy or self.active or any((not s.complete or s.english_pending) and not s.failure for s in self.sessions.values()): raise ValueError('请结束录音并等待识别或本机操作完成')
         self.toolkit_busy=True; self.toolkit_status=label+'中…'
         if label=='恢复': self.stop_server()
         def run():
@@ -348,9 +414,17 @@ class Controller(QObject):
             self.hooks.suspended=action=='beginShortcut'; self.hooks.capture_mouse=self.hooks.suspended
             if self.hooks.suspended: QTimer.singleShot(30000,lambda:self.cancel_shortcut())
             return {'ok':True}
+        if action=='validateEnglishShortcut':
+            if self.active:raise ValueError('请结束录音后再修改翻译结束键')
+            shortcut=self.decode_english_shortcut(value)
+            if self.same_shortcut(shortcut,self.hooks.gesture.shortcut):raise ValueError('翻译结束键不能与语音启停键相同')
+            return {'ok':True}
         if action=='shortcut':
             if self.active: raise ValueError('请结束录音后再修改快捷键')
-            shortcut=self.decode_shortcut(value); self.settings['shortcut']=value; self.save_settings()
+            shortcut=self.decode_shortcut(value)
+            english=self.english_config()
+            if english and self.same_shortcut(shortcut,self.decode_english_shortcut(english['shortcut'])):raise ValueError('这个键已用于英文翻译结束')
+            self.settings['shortcut']=value; self.save_settings()
             self.hooks.gesture=__import__('xiaoha_windows.core',fromlist=['Gesture']).Gesture(shortcut); self.cancel_shortcut(); return {'ok':True}
         if action=='launchAtLogin':
             if type(value) is not bool: raise ValueError('启动开关格式无效')
@@ -394,7 +468,7 @@ class Controller(QObject):
             from desktop.toolkit_archive import create_backup
             return self.async_work('备份',lambda:create_backup(self.root,path))
         if action=='chooseRestore':
-            if self.active or any(not s.complete and not s.failure for s in self.sessions.values()): raise ValueError('请先结束录音并等待识别完成')
+            if self.active or any((not s.complete or s.english_pending) and not s.failure for s in self.sessions.values()): raise ValueError('请先结束录音并等待识别完成')
             path,_=QFileDialog.getOpenFileName(self.window,'选择完整备份','','ZIP (*.zip)')
             if not path: return {'cancelled':True}
             from desktop.toolkit_archive import verify
@@ -439,6 +513,8 @@ class Controller(QObject):
         deadline=time.monotonic()+3
         for bridge in bridges: bridge.wait_finished(max(0,deadline-time.monotonic()))
         self.retired_bridges.update(bridges); self.bridges.clear(); self.reap_bridges()
+        for client in list(self.english_clients.values()):client.cancel()
+        self.english_workers.shutdown(wait=False,cancel_futures=True)
         self.stop_server()
         self.tray.hide(); self.capsule.hide(); self.worker.shutdown(wait=False,cancel_futures=True)
     def stop_server(self):
@@ -453,7 +529,7 @@ def run(root,startup=False):
     if os.name!='nt': raise SystemExit('这是Windows桌面宿主；Mac使用现有小哈语音。')
     app=QApplication(sys.argv); app.setApplicationName('小哈语音'); app.setQuitOnLastWindowClosed(False)
     from PySide6.QtCore import QDir
-    name='XiaohaVoice-Desktop'
+    name='XiaohaVoice-Standalone-Desktop'
     lock=QLockFile(QDir.tempPath()+'/'+name+'.lock'); lock.setStaleLockTime(0)
     if not lock.tryLock(0):
         socket=QLocalSocket(); socket.connectToServer(name)

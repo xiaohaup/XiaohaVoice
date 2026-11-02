@@ -1,4 +1,4 @@
-# 构建 Mac 基线
+# 构建 Mac 独立语音预览版
 
 目标为 Apple Silicon、macOS 14+。这一版原生程序是本地 ad-hoc 签名；代码签名和系统权限不适合通过复制另一台电脑的登记来解决。
 
@@ -25,13 +25,13 @@ python3 -m venv .venv
 
 构建脚本生成隔离的原生 App、Python Runtime、剪贴板辅助程序、Opus 和组件，并打本地签名；不启动 App、不开麦、不访问真实剪贴板、不初始化识别身份、不复制本机 Data。必须指定尚不存在的输出文件夹，避免覆盖已有个人工具包。Opus 不在标准 Homebrew 路径时传入 `--opus /absolute/path/libopus.0.dylib`。
 
-`mac-prototype/build.py` 是原生源文件的原始构建入口，原样保留；新增包装脚本负责完整工具包的相对目录构建，不改变原录音、粘贴或识别代码。
+`mac-prototype/build.py` 负责原生宿主；完整构建脚本另打包运行组件。当前分支为0.4.1英文输出预览，原基础版代码和构建入口仍保留在原标签。
 
 ## 离线检查
 
 ```sh
 PYTHONPATH=sync-suite:ime-channel-test .venv/bin/python -m pytest sync-suite/tests ime-channel-test/tests
-python3 scripts/verify_snapshot.py
+python3 scripts/verify_preview.py
 ```
 
 Python 回归仅用合成数据、假凭证和模拟网络，不打开真人麦克风或调用付费 API。新 Mac 上的真实权限、快捷键、录音、显示和目标输入框仍需逐项实测。

@@ -82,14 +82,15 @@ class LocalWorkbench:
                                    'seconds': seconds, 'characters': characters(text) if chars is None else chars,
                                    'application': row.get('application') if isinstance(row.get('application'), str) else None,
                                    'source': row.get('source'), 'record_type': row.get('record_type'),
-                                   **({'original_text':row['original_text']} if isinstance(row.get('original_text'),str) else {})})
+                                   **({'original_text':row['original_text']} if isinstance(row.get('original_text'),str) else {}),
+                                   **({'english':row['english']} if isinstance(row.get('english'),str) else {})})
                 except (KeyError, TypeError, ValueError, OverflowError): continue
             self._record_cache = sorted(result, key=lambda r: r['created_at'], reverse=True)
             self._record_cache_key = cache_key
         return [r for r in self._record_cache
                 if (not selected_day or r['created_at'][:10] == selected_day.isoformat())
                 and (not cutoff or r['created_at'][:10] >= cutoff.isoformat())
-                and query.casefold() in r['text'].casefold()]
+                and query.casefold() in (r['text']+'\n'+r.get('english','')).casefold()]
 
     def revision(self):
         return str(revision(self.history_path))
@@ -161,7 +162,7 @@ def install_workbench(app, companion, origin, root):
                             or 'application/json' not in request.headers.get('content-type', '')):
                         return JSONResponse({'detail': '请求来源不匹配，请重新打开工作台'}, 403)
                     data = await request.body()
-                    if len(data) > (2_000_000 if path in ('/workbench/api/corrections','/workbench/api/corrections-draft') else 65536):
+                    if len(data) > (2_000_000 if path in ('/workbench/api/corrections','/workbench/api/corrections-draft') else 310000 if path=='/workbench/api/translation-run' else 65536):
                         return JSONResponse({'detail': '内容过大'}, 413)
             try:
                 response = await call_next(request)
@@ -243,6 +244,74 @@ def install_workbench(app, companion, origin, root):
     from desktop.runtime_log import append as diagnostic, recent
     data_dir=store.history_path.parent if store.history_path else store.directory
     runtime=RuntimeSettings(data_dir)
+    from desktop.voice_translation import TranslationSettings,translate as translate_english,TEST_TEXT
+    translation=TranslationSettings(data_dir)
+    translation_test_lock=asyncio.Lock()
+    @app.get('/workbench/api/translation')
+    def translation_get():return translation.public()
+    @app.get('/workbench/api/translation-session')
+    def translation_session():return translation.session_info()
+    @app.post('/workbench/api/translation-run')
+    async def translation_run(request:Request):
+        # Authenticated native clients use this same long-lived owner as the
+        # settings page. Only text/results cross loopback; a Key never does.
+        import threading
+        from desktop.voice_translation import MAX_TEXT
+        body=await request.json()
+        if not isinstance(body,dict):return JSONResponse({'ok':False,'error':'翻译请求格式无效'},422)
+        text=body.get('text');revision=body.get('revision')
+        if not isinstance(text,str) or not text.strip() or len(text.encode('utf-8'))>MAX_TEXT:
+            return JSONResponse({'ok':False,'error':'翻译内容为空或过长，原文已保留'},422)
+        if not isinstance(revision,str) or not revision or len(revision)>200:
+            return JSONResponse({'ok':False,'error':'翻译设置已改变，请使用新设置重试'},422)
+        if not translation.config()['enabled']:
+            return {'ok':False,'error':'英文输出未启用，原文已保留'}
+        cancelled=threading.Event()
+        async def disconnected():
+            while not await request.is_disconnected():await asyncio.sleep(.1)
+        work=asyncio.create_task(asyncio.to_thread(translate_english,text,revision,translation,cancelled=cancelled))
+        watching=asyncio.create_task(disconnected())
+        try:
+            done,_=await asyncio.wait((work,watching),timeout=24,return_when=asyncio.FIRST_COMPLETED)
+            if work in done:return {'ok':True,**work.result()}
+            return {'ok':False,'error':'翻译已取消或安全存储仍在等待确认，原文已保留'}
+        except ValueError as exc:return {'ok':False,'error':str(exc)}
+        finally:
+            cancelled.set();watching.cancel()
+            if not work.done():work.cancel()
+    @app.post('/workbench/api/translation')
+    async def translation_post(request:Request):
+        try:
+            value=await asyncio.to_thread(translation.save,await request.json())
+            diagnostic(data_dir,'settings',phase='saved')
+            return value
+        except ValueError as exc:return JSONResponse({'detail':str(exc)},422)
+    @app.post('/workbench/api/translation-credential')
+    async def translation_credential(request:Request):
+        body=await request.json()
+        if body.get('reveal') is not True:return JSONResponse({'detail':'请明确点击显示翻译 Key'},422)
+        try:
+            _,secret=await asyncio.wait_for(asyncio.to_thread(translation.credentials,body.get('revision')),20)
+            if translation.config()['revision']!=body.get('revision'):raise ValueError('翻译设置已改变，请重新打开')
+            return JSONResponse({'credential':secret},headers={'Cache-Control':'no-store'})
+        except asyncio.TimeoutError:return JSONResponse({'detail':'安全存储尚未响应，请在系统提示中完成验证后重试'},422)
+        except ValueError as exc:return JSONResponse({'detail':str(exc)},422)
+    @app.post('/workbench/api/translation-test')
+    async def translation_test(request:Request):
+        if translation_test_lock.locked():return JSONResponse({'detail':'翻译测试正在进行，请稍候'},409)
+        async with translation_test_lock:
+            import threading
+            from datetime import datetime,timezone
+            body=await request.json();revision=body.get('revision');cancelled=threading.Event()
+            try:
+                result=await asyncio.wait_for(asyncio.to_thread(translate_english,TEST_TEXT,revision,translation,cancelled=cancelled),25)
+                result={'ok':True,**result}
+            except asyncio.TimeoutError:
+                cancelled.set();result={'ok':False,'detail':'翻译测试超时，请检查网络或系统安全存储询问'}
+            except ValueError as exc:result={'ok':False,'detail':str(exc)}
+            result['checked_at']=datetime.now(timezone.utc).isoformat()
+            current=await asyncio.to_thread(translation.record_test,revision,result)
+            return {**result,'current':current}
     @app.get('/workbench/api/runtime')
     def runtime_get(): return runtime.load()
     @app.post('/workbench/api/runtime')
