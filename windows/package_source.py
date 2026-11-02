@@ -20,8 +20,8 @@ def build(destination):
         if any(p in name.split('/') for p in ('Data','.venv','devkit','private','__pycache__')):raise ValueError('交接成员超出白名单')
         payload[name]=path.read_bytes()
     for name in PREVIEW_OVERLAY:
-        source=ROOT.parent/name
-        if not source.is_file():source=ROOT/'shared-preview'/name
+        source=ROOT/'shared-preview'/name
+        if not source.is_file():source=ROOT.parent/name
         payload['shared-preview/'+name]=source.read_bytes()
     manifest={name:hashlib.sha256(value).hexdigest() for name,value in payload.items()}
     destination.parent.mkdir(parents=True,exist_ok=True)

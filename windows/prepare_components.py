@@ -37,8 +37,8 @@ def prepare(source, output):
         relative=name.removeprefix('sync-suite/') if name.startswith('sync-suite/') else name.removeprefix('ime-channel-test/')
         destination=output/('Components/workbench' if name.startswith('sync-suite/') else 'Components/engine')/relative
         destination.parent.mkdir(parents=True,exist_ok=True)
-        source_file=ROOT.parent/name
-        if not source_file.is_file():source_file=ROOT/'shared-preview'/name
+        source_file=ROOT/'shared-preview'/name
+        if not source_file.is_file():source_file=ROOT.parent/name
         destination.write_bytes(source_file.read_bytes())
     engine=output/'Components/engine/channel_probe.py'
     text=engine.read_text(encoding='utf-8').replace('os.fchmod(f.fileno(),0o600)',"\n        if hasattr(os,'fchmod'): os.fchmod(f.fileno(),0o600)")
