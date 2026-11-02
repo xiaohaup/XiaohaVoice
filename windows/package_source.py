@@ -19,7 +19,7 @@ def build(destination):
         name=path.relative_to(ROOT).as_posix()
         if any(p in name.split('/') for p in ('Data','.venv','devkit','private','__pycache__')):raise ValueError('交接成员超出白名单')
         payload[name]=path.read_bytes()
-    for name in PREVIEW_OVERLAY:
+    for name in (*PREVIEW_OVERLAY,'docs/ENGLISH_OUTPUT.md'):
         source=ROOT/'shared-preview'/name
         if not source.is_file():source=ROOT.parent/name
         payload['shared-preview/'+name]=source.read_bytes()

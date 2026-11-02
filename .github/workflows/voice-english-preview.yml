@@ -2,13 +2,10 @@ name: Voice English preview
 on:
   push:
     branches: ['codex/voice-english-*']
-  pull_request:
-    paths:
-      - 'windows/**'
-      - 'sync-suite/**'
-      - 'ime-channel-test/**'
-      - '.github/workflows/voice-english-preview.yml'
   workflow_dispatch:
+concurrency:
+  group: voice-english-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -53,6 +50,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: XiaohaVoice-English-Windows-x64
+          compression-level: 0
           path: artifacts/*.zip
           if-no-files-found: error
           retention-days: 30

@@ -16,7 +16,7 @@
 
 ## 下载体验
 
-**此分支为 0.4.1-preview.1：原文语音＋可选英文输出。** Mac短按右Command、Windows短按右Ctrl结束为英文；原启停键结束仍输出原文。首次先配置自己的翻译API，见[英文输出与独立运行说明](docs/ENGLISH_OUTPUT.md)。Windows构建配置在 `.github/workflow-templates/`；授权工作流后移入 `.github/workflows/` 才会运行。当前分支的构建包与基础版分别保存，以下两个基础标签保持固定。
+**此分支为 0.4.1-preview.1：原文语音＋可选英文输出。** Mac短按右Command、Windows短按右Ctrl结束为英文；原启停键结束仍输出原文。首次先配置自己的翻译API，见[英文输出与独立运行说明](docs/ENGLISH_OUTPUT.md)。Windows构建与合成检查由独立的GitHub Actions工作流执行，结果见本分支对应PR。当前分支的构建包与基础版分别保存，以下两个基础标签保持固定。
 
 | 平台 | 基础功能保留版 | 下载 |
 | --- | --- | --- |

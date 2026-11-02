@@ -65,6 +65,9 @@ def build(output):
     shutil.copy2(stage/'toolkit.json',output/'toolkit.json')
     for name in ('README.md','dependencies.lock.json','requirements-windows.txt','THIRD-PARTY.md'):
         shutil.copy2(ROOT/name,output/name)
+    english_help=ROOT/'shared-preview/docs/ENGLISH_OUTPUT.md'
+    if not english_help.is_file():english_help=ROOT.parent/'docs/ENGLISH_OUTPUT.md'
+    shutil.copy2(english_help,output/'英文输出说明.md')
     shutil.copy2(icon,output/'小哈语音.ico');licenses(output)
     # A real runtime check exercises bundled Opus, without network or microphone.
     from xiaoha_windows.services import environment
