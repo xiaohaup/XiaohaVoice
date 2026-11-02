@@ -17,6 +17,7 @@ jobs:
         working-directory: windows
     env:
       PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
       QT_QPA_PLATFORM: offscreen
       QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
       PYTHONPATH: '${{ github.workspace }}/windows;${{ github.workspace }}/windows/devkit/Components/workbench;${{ github.workspace }}/windows/devkit/Components/engine'
@@ -36,7 +37,8 @@ jobs:
       - name: Frozen shared regressions on prepared Windows components
         run: python verify_shared.py
       - name: Translation service, secure owner and cancellation regressions
-        run: python -m pytest -q --tb=short ../sync-suite/tests/test_voice_english.py --junitxml=../artifacts/translation-tests.xml
+        timeout-minutes: 3
+        run: python -m pytest -vv --tb=short -o faulthandler_timeout=45 ../sync-suite/tests/test_voice_english.py --junitxml=../artifacts/translation-tests.xml
       - name: Translation settings UI (Windows key layout)
         env:
           XH_VOICE_WEB: '${{ github.workspace }}/windows/devkit/Components/workbench/web'
