@@ -176,7 +176,7 @@
     "sync-suite/tests/test_service_setup.py": "94dadea9a704b70d16712ad0ca68886df5a24d83e7d0077bdf8c92f9fe02ccca",
     "sync-suite/tests/test_shandianshuo_import.py": "176e200550a4fda6e956cff95144eb05393c7f0d451333270506b6a7f01033de",
     "sync-suite/tests/test_toolkit_features.py": "1eae7c0819bc4edeac1213f92548c9ef84f57989e82f033476196cb2fad300e8",
-    "sync-suite/tests/test_voice_english.py": "b3ab1f2faf08622e5ded9740874e8330587962f3c9ee0ae66d0e1c9d7c4db53c",
+    "sync-suite/tests/test_voice_english.py": "b3588382f12751f70f89990c2ad5ab0564604aae05216d6d431a58609f4f6336",
     "sync-suite/tests/test_voice_improvements.py": "022850b5aa8c845d1635397b581786a730f47648544ab00bfb538ef0a3a19a7d",
     "sync-suite/tests/test_workbench.py": "c852207e2ff6cf9f5b792c64015d6d6e581ff9a857e8958b06d4fe6abaebd534",
     "sync-suite/tests/voice_english_ui.cjs": "3bb89ef312a24bb64d67ba19be852883201479939fa9453ac3ab830f7a19d71a",

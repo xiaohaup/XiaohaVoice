@@ -128,7 +128,7 @@ def test_error_redaction_no_retry_or_redirect(configured,status,message):
     assert message in str(exc.value) and 'synthetic-translation-key' not in str(exc.value) and 'private-source' not in str(exc.value)
     assert len(requests)==1
 
-@pytest.mark.parametrize('body',[b'bad-json',b'{}',b'{"choices":[]}',b'{"choices":[{"message":{"content":""}}]}',b'x'*(MAX_RESPONSE+1)])
+@pytest.mark.parametrize('body',[b'bad-json',b'{}',b'{"choices":[]}',b'{"choices":[{"message":{"content":""}}]}',b'x'*(MAX_RESPONSE+1)],ids=['bad-json','empty-object','empty-choices','empty-content','oversized-response'])
 def test_bad_or_empty_response_retains_source(configured,body):
     s,vault,v=configured
     with pytest.raises(ValueError):translate(TEST_TEXT,v['revision'],s,factory(lambda r:httpx.Response(200,content=body)))
