@@ -7,7 +7,7 @@ bundle=(args.output.resolve() if args.output else r/'小哈语音.app')/'Content
 (bundle/'MacOS').mkdir(parents=True,exist_ok=True)
 bridge=r.parent/'ime-channel-test'
 p={'CFBundleExecutable':'XiaohaVoice','CFBundleIdentifier':'com.xiaoha.voice.standalone','CFBundleName':'小哈语音',
-   'CFBundleDisplayName':'小哈语音','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.4.1-preview.1','CFBundleVersion':'13',
+   'CFBundleDisplayName':'小哈语音','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.4.1','CFBundleVersion':'13','XiaohaReleaseLabel':'0.4.1-preview.1',
    'LSUIElement':True,'LSMinimumSystemVersion':'14.0','NSHighResolutionCapable':True,
    'NSMicrophoneUsageDescription':'按已设快捷键或开始按钮后，使用Mac内建麦克风，并将声音发送至你选定的语音通道；正常录音不另存音频，失败或未完成音频仅在本机保留供恢复。',
    'PrototypeRoot':'mac-prototype' if args.output else str(r),'BridgeRoot':'ime-channel-test' if args.output else str(bridge),'NSAppTransportSecurity':{'NSAllowsLocalNetworking':True},'CFBundleIconFile':'XiaohaVoice.icns'}
