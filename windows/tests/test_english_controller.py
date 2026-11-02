@@ -16,7 +16,7 @@ def controller(tmp_path,session):
 
 def test_ready_keeps_source_and_rejects_duplicate_or_old_generation(tmp_path):
     s=Session(recording=False,complete=True,text='保留原文',english_phase='translating',english_generation=2)
-    h,calls=controller(tmp_path,s);h.history.add(s)
+    h,calls=controller(tmp_path,s);h.history.add(s,s.text)
     Controller.english_done(h,s.id,1,{'ok':True,'text':'Stale.'});assert not calls
     Controller.english_done(h,s.id,2,{'ok':True,'text':'Retained source.'})
     assert s.text=='保留原文' and s.output_text=='Retained source.' and calls==['history','drain','tick']
@@ -33,7 +33,7 @@ def test_cancel_blocks_late_result_and_keeps_history(tmp_path):
 
 def test_failure_releases_delivery_without_pasting_source(tmp_path):
     s=Session(recording=False,complete=True,text='原文',english_phase='translating',english_generation=1)
-    h,calls=controller(tmp_path,s);h.history.add(s)
+    h,calls=controller(tmp_path,s);h.history.add(s,s.text)
     Controller.english_done(h,s.id,1,{'ok':False,'error':'合成连接失败，原文已保留'})
     assert s.english_phase=='failed' and s.english_text=='' and s.text=='原文'
     h.deliveries.append(s.id);assert h.deliveries.begin(h.sessions) is None
