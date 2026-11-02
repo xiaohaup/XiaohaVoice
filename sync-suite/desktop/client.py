@@ -81,7 +81,7 @@ class Remote:
 
 
 class Vault:
-    SERVICE = 'com.xiaoha.voice.sync'
+    SERVICE = 'com.xiaoha.voice.standalone.sync'
 
     @staticmethod
     def key(server, account_id):

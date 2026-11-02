@@ -52,3 +52,7 @@ clipboard-macos
 
 # Pinned, audited Windows build input, not user data.
 !windows/upstream/source.zip
+
+# Isolated preview generated components and private translation profiles.
+windows/devkit/
+translation-settings.json

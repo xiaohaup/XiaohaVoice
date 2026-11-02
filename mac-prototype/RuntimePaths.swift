@@ -1,6 +1,7 @@
 import Foundation
 
 enum RuntimePaths {
+    static var origin:URL{URL(string:"http://127.0.0.1:18766")!}
     static var toolkit:URL? {
         let parent=Bundle.main.bundleURL.resolvingSymlinksInPath().deletingLastPathComponent()
         guard let d=try? Data(contentsOf:parent.appendingPathComponent("toolkit.json")),let v=(try? JSONSerialization.jsonObject(with:d)) as? [String:Any],v["format"] as? Int==1 else{return nil}

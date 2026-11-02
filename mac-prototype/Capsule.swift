@@ -105,7 +105,8 @@ final class Capsule {
         hideWork=work
         DispatchQueue.main.asyncAfter(deadline:.now()+seconds,execute:work)
     }
-    func update(state:String,text:String,seconds:Double,recording:Bool,hotkey:Bool,retryable:Bool=false,keyLabel:String="右 Option") {
+    func update(state:String,text:String,seconds:Double,recording:Bool,hotkey:Bool,retryable:Bool=false,keyLabel:String="右 Option",retryLabel:String="重试识别",englishKey:String?=nil) {
+        retry.title=retryLabel
         if recording{previewUntil = .distantPast}
         if Date()<previewUntil {
             status.stringValue="配色预览";time.stringValue="00:00";hint.stringValue="悬浮窗配色预览";line.stringValue="说话时，文字会显示在这里…";full.string="说话时，文字会显示在这里…";retry.isHidden=true;hint.isHidden=false;copy.isEnabled=false;wave.active=false;return
@@ -114,7 +115,8 @@ final class Capsule {
         let clock=String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60)
         if time.stringValue != clock {time.stringValue=clock}
         let shortcut=hotkey ? (recording ? keyLabel+" 结束" : keyLabel+" 开始") : "菜单栏开始 / 结束"
-        if hint.stringValue != shortcut {hint.stringValue=shortcut;hint.toolTip=shortcut;hint.cell?.lineBreakMode = .byTruncatingMiddle}
+        let shownShortcut=recording && englishKey != nil ? keyLabel+" 原文 · "+englishKey!+" 英文":shortcut
+        if hint.stringValue != shownShortcut {hint.stringValue=shownShortcut;hint.toolTip=shownShortcut;hint.cell?.lineBreakMode = .byTruncatingMiddle}
         retry.isHidden = !retryable;hint.isHidden=retryable
         let dismissLabel=recording ? "取消本次录音，不保存或粘贴" : "收起浮窗，已有内容仍留在本机"
         dismiss.toolTip=dismissLabel;dismiss.setAccessibilityLabel(recording ? "取消本次录音" : "收起浮窗")

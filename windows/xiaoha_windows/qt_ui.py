@@ -84,10 +84,16 @@ class Capsule(QWidget):
         if self.preview_until > time.monotonic() and not self.busy: return
         if session:
             seconds = int(session.seconds); self.clock.setText(f'{seconds//60:02d}:{seconds%60:02d}')
-            self.status.setText('录音中' if session.recording else '识别中' if not session.complete and not session.failure else '已保留' if session.failure else '已完成')
-            self.hint.setText(shortcut+(' 结束' if session.recording else ' 开始'))
-            self.line.setText(session.delivery or session.text[-220:] or (session.failure if session.failure else '正在听，文字会显示在这里…'))
-            self.copy.setEnabled(bool(session.text)); self.retry.setVisible(bool(session.failure and not session.recording)); self.hint.setVisible(not bool(session.failure and not session.recording))
+            state='录音中' if session.recording else '识别中' if not session.complete and not session.failure else '已保留' if session.failure else '已完成'
+            if session.english_pending:state='正在翻译英文' if session.complete else '正在整理原文'
+            elif session.english_phase=='failed':state='翻译未完成 · 可重试'
+            self.status.setText(state)
+            hint=shortcut+(' 结束' if session.recording else ' 开始')
+            if session.recording and session.english_configuration:hint=shortcut+' 原文 · '+session.english_configuration['shortcut']['label']+' 英文'
+            self.hint.setText(hint)
+            self.line.setText(session.english_error or session.delivery or session.output_text[-220:] or (session.failure if session.failure else '正在听，文字会显示在这里…'))
+            retryable=bool(session.failure and not session.recording or session.english_phase=='failed')
+            self.copy.setEnabled(bool(session.text)); self.retry.setVisible(retryable); self.retry.setText('重试翻译（复制）' if session.english_phase=='failed' else '重试识别');self.hint.setVisible(not retryable)
             self.wave.rms = session.activity.last_rms if session.recording else 0; self.wave.update()
     def preview(self):
         if self.busy: self.present(); return

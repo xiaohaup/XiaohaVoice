@@ -20,6 +20,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
     var menu=NSMenu()
     var toggleItem:NSMenuItem!
     var keyItem:NSMenuItem!
+    var englishTranslator:VoiceTextTranslating=NativeVoiceTextTranslator()
     var active:VoiceSession?
     var displayed:VoiceSession?
     var sessions=[UUID:VoiceSession]()
@@ -46,7 +47,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
     }
     var shortcutSafe:Bool {hotkey.shortcut.keyCode != 61 || shortcutSeparated}
     func applicationDidFinishLaunching(_ note:Notification) {
-        if let other=NSRunningApplication.runningApplications(withBundleIdentifier:"com.xiaoha.voice").first(where:{$0.processIdentifier != ProcessInfo.processInfo.processIdentifier}) {other.activate(options:[.activateAllWindows]);NSApp.terminate(nil);return}
+        if let other=NSRunningApplication.runningApplications(withBundleIdentifier:"com.xiaoha.voice.standalone").first(where:{$0.processIdentifier != ProcessInfo.processInfo.processIdentifier}) {other.activate(options:[.activateAllWindows]);NSApp.terminate(nil);return}
         NSApp.setActivationPolicy(.accessory)
         do {history=try HistoryStore(directory:localDirectory)} catch {historyError="本机历史暂不可用，已有文件保留。"}
         do {for session in try recovery.load(excluding:Set(history?.records.map{$0.id} ?? [])){sessions[session.id]=session}} catch {historyError="有待恢复的录音无法读取，原文件已保留。"}
@@ -59,7 +60,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         try? workbench.login.migrateAliasIfNeeded()
         workbench.toolkit=toolkit
         toolkit.prepare={ [weak self] in
-            guard let self=self,self.active==nil,!self.stoppingCapture,!self.sessions.values.contains(where:{!$0.complete && $0.failure==nil}) else{throw NSError(domain:"小哈语音",code:1,userInfo:[NSLocalizedDescriptionKey:"请先结束录音并等待识别完成，再备份或恢复"])}
+            guard let self=self,self.active==nil,!self.stoppingCapture,!self.sessions.values.contains(where:{(!$0.complete || $0.translationPending) && $0.failure==nil}) else{throw NSError(domain:"小哈语音",code:1,userInfo:[NSLocalizedDescriptionKey:"请先结束录音并等待识别完成，再备份或恢复"])}
             for session in self.pendingSessions{try self.recovery.save(session)};self.saveSettings()
         }
         toolkit.restored={ [weak self] in
@@ -75,7 +76,9 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         addMenu("本机历史",#selector(openHistory));addMenu("语音输入",#selector(openVoiceSettings));addMenu("词库纠正",#selector(openWordSettings));addMenu("应用设置",#selector(openSettings));menu.addItem(.separator());addMenu("退出小哈语音",#selector(quit))
         item.menu=menu
         hotkey.onToggle={ [weak self] in self?.toggle() }
-        hotkey.shouldCancel={ [weak self] in guard let self=self else{return false};return self.active != nil || (self.displayed.map{!$0.complete && !$0.restored && $0.failure==nil} ?? false) }
+        hotkey.shouldStopEnglish={ [weak self] in self?.active?.englishConfiguration != nil }
+        hotkey.onStopEnglish={ [weak self] in self?.stopEnglishRecording() }
+        hotkey.shouldCancel={ [weak self] in guard let self=self else{return false};return self.active != nil || self.displayed?.translationPending == true || (self.displayed.map{!$0.complete && !$0.restored && $0.failure==nil} ?? false) }
         hotkey.onCancel={ [weak self] in self?.cancelCurrent() }
         hotkey.onMouseCapture={ [weak self] button in guard let self=self,Date()<self.shortcutCaptureUntil else{return};self.workbench.capturedMouseShortcut(["keyCode":-1,"modifiers":0,"mouseButton":button,"label":"鼠标侧键 \(button+1)"]) }
         capsule.onDismiss={ [weak self] in self?.dismissCapsule() }
@@ -130,10 +133,15 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
                 guard self.active==nil else{throw invalid("请结束当前录音后再修改快捷键")}
                 self.hotkey.suspended=true;self.shortcutCaptureUntil=Date().addingTimeInterval(30)
             case "cancelShortcut":self.hotkey.suspended=false
+            case "validateEnglishShortcut":
+                guard self.active==nil else{throw invalid("请结束录音后再修改翻译结束键")}
+                guard let data=try? JSONSerialization.data(withJSONObject:value),let config=try? JSONDecoder().decode(VoiceShortcut.self,from:data),config.valid,![59,62].contains(config.keyCode) else{throw invalid("请选择有效的翻译结束键")}
+                guard !PanelShortcut(enabled:true,keyCode:config.keyCode,modifiers:config.modifiers,label:config.label,mouseButton:config.mouseButton,mode:"single").conflicts(self.hotkey.shortcut) else{throw invalid("翻译结束键不能与语音启停键相同")}
             case "shortcut":
                 guard self.active==nil else{throw invalid("请先结束当前录音")}
                 guard let data=try? JSONSerialization.data(withJSONObject:value),let config=try? JSONDecoder().decode(VoiceShortcut.self,from:data),config.valid else{throw invalid("请选择单侧修饰键、功能键或组合键，避免普通打字触发")}
                 guard ![59,62].contains(config.keyCode) else{throw invalid("左右 Control 暂留给豆包输入法，请选其他键避开冲突")}
+                guard VoiceEnglishConfiguration.read(self.localDirectory)?.panelShortcut.conflicts(config) != true else{throw invalid("这个键已用于英文翻译结束") }
                 self.hotkey.shortcut=config;self.hotkey.suspended=false;self.wantsHotkey=true;self.saveSettings()
                 if RightOptionMonitor.authorized{_ = self.hotkey.start()}
             default:throw invalid("设置无法识别")
@@ -145,7 +153,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
             guard let self=self else{return}
             switch command {
             case "previewCapsule":
-                guard self.active==nil,!self.stoppingCapture,!self.sessions.values.contains(where:{!$0.complete && $0.failure==nil}) else{self.capsule.show();return}
+                guard self.active==nil,!self.stoppingCapture,!self.sessions.values.contains(where:{(!$0.complete || $0.translationPending) && $0.failure==nil}) else{self.capsule.show();return}
                 self.capsule.preview{[weak self] in self?.active==nil};self.refresh()
             case "pasteTest":self.testPaste()
             case "inputPermission":
@@ -208,6 +216,8 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         guard !toolkit.busy else{toolkit.status="正在备份或恢复，请稍后开始录音。";return}
         if pasteTestRunning {pasteTestGeneration+=1;pasteTestRunning=false;pasteTestStatus="测试已取消，语音录音优先。"}
         let s=VoiceSession();sessions[s.id]=s;active=s;displayed=s
+        if let config=VoiceEnglishConfiguration.read(localDirectory),!config.panelShortcut.conflicts(hotkey.shortcut){s.englishConfiguration=config}
+        hotkey.englishShortcut=s.englishConfiguration?.panelShortcut
         EventLog.record("capture",phase:"start")
         recorder.onAudio={ [weak self,weak s] data,rms in
             guard let self=self,let s=s else{return}
@@ -241,6 +251,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         refresh()
     }
     func hideStoppedCapsule(_ s:VoiceSession){
+        if s.englishRevision != nil{return}
         capsule.hide(after:1.2){[weak self,weak s] in guard let self=self,let s=s else{return false};return self.active==nil && self.displayed?.id==s.id}
     }
     func finishQuiet(_ s:VoiceSession){
@@ -263,6 +274,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         drainDeliveries()
     }
     func dismissCapsule(){
+        if let s=displayed,s.translationPending{cancelEnglish(s);return}
         if let s=active {
             s.cancel();s.deliveryStatus="已取消";s.bridge?.cancel();lastStoppedSession=s.id;active=nil;stoppingCapture=true
             recorder.stop{[weak self] in guard let self=self else{return};self.stoppingCapture=false;self.refresh();if self.pendingStart{self.pendingStart=false;self.toggle()}}
@@ -271,6 +283,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         capsule.hide(after:0){[weak self] in self?.active==nil}
     }
     func cancelCurrent(){
+        if active==nil,let s=displayed,s.translationPending{cancelEnglish(s);return}
         EventLog.record("capture",phase:"cancel")
         if active != nil{dismissCapsule();return}
         guard let s=displayed,!s.complete,!s.restored,s.failure==nil else{return}
@@ -299,7 +312,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
                     guard let history=self.history else{throw NSError(domain:"历史不可用",code:1)}
                     try history.append(VoiceRecord(id:s.id,createdAt:s.createdAt,text:text,seconds:duration,application:s.applicationName));self.workbench.historyChanged()
                 } catch {self.historyError="本机历史保存失败，音频和草稿已保留，可重试。";s.connectionFailed(self.historyError!);self.preserve(s);self.refresh();return}
-                s.finish(text);self.lastMetrics=event.filter {!["text","event"].contains($0.key)}
+                s.finish(text);if s.englishRevision != nil{self.translateEnglish(s)};self.lastMetrics=event.filter {!["text","event"].contains($0.key)}
                 self.drainDeliveries()
                 self.refreshHistory()
             case "error":s.connectionFailed(event["message"] as? String ?? "识别连接中断");self.resolveUnfinished(s,.failed)
@@ -325,10 +338,33 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         }
         if s.captureEnded && !s.stopSent {s.stopSent=true;s.bridge?.finish()}
     }
-    func retry(_ s:VoiceSession) {guard !s.complete,s.failure != nil else{return};connect(s);refresh()}
+    func retry(_ s:VoiceSession) {
+        if s.complete,s.englishOutput?.phase == .failed {
+            guard let config=VoiceEnglishConfiguration.read(localDirectory) else{s.deliveryStatus="请先配置并开启英文输出";refresh();return}
+            s.englishRevision=config.revision;s.englishOutput=nil;s.englishRetryCopiesOnly=true;s.deliveryStatus=nil
+            deliveries.append(s.id);translateEnglish(s);refresh();return
+        }
+        guard !s.complete,s.failure != nil else{return};connect(s);refresh()}
+    func stopEnglishRecording(){guard let s=active,let config=s.englishConfiguration else{return};s.englishRevision=config.revision;stopRecording()}
+    func translateEnglish(_ s:VoiceSession){
+        guard s.complete,let revision=s.englishRevision,!s.text.isEmpty else{return}
+        let output=VoiceEnglishOutput(source:s.text,revision:revision);s.englishOutput=output
+        output.start(using:englishTranslator){[weak self,weak s,weak output] in
+            guard let self=self,let s=s,let output=output,s.englishOutput===output else{return}
+            if output.phase == .ready,let text=output.text {
+                do{try self.history?.associateEnglish(s.id,text);self.workbench.historyChanged()}catch{self.historyError="英文已生成，中文原稿保留；译文历史暂未保存"}
+                if let ms=output.milliseconds{EventLog.record("delivery",phase:"translation",seconds:Double(ms)/1000)}
+            }else if output.phase == .failed{s.deliveryStatus="英文翻译未完成 · 中文原稿已保留"}
+            self.drainDeliveries();self.refresh()
+        }
+    }
+    func cancelEnglish(_ s:VoiceSession){
+        s.englishOutput?.cancel();s.englishRevision=nil;s.deliveryStatus="已取消翻译 · 中文原稿已保留"
+        drainDeliveries();refresh();capsule.hide(after:0){[weak self] in self?.active==nil}
+    }
     func drainDeliveries(){
-        let id=deliveries.begin(ready:{[self] id in sessions[id].map{$0.complete && $0.targetReady} ?? false},skip:{[self] id in sessions[id].map{$0.failure != nil || $0.deliveryStatus != nil} ?? true})
-        if let id=id,let s=sessions[id]{deliverResult(s,s.text)}
+        let id=deliveries.begin(ready:{[self] id in sessions[id].map{$0.complete && !$0.translationPending && $0.targetReady} ?? false},skip:{[self] id in sessions[id].map{$0.failure != nil || $0.deliveryStatus != nil} ?? true})
+        if let id=id,let s=sessions[id]{deliverResult(s,s.outputText)}
     }
     func deliveryFinished(_ s:VoiceSession,posted:Bool){
         // Let the receiving app consume Cmd+V before capturing the new caret.
@@ -344,7 +380,8 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         }
     }
     func deliverResult(_ s:VoiceSession,_ text:String){
-        let settings=DeliverySettings.read(localDirectory)
+        var settings=DeliverySettings.read(localDirectory)
+        if s.englishRetryCopiesOnly{settings.autoPaste=false}
         let current={ [weak s] ()->Bool in guard let s=s else{return false};return s.complete && !s.restored && s.deliveryStatus==nil}
         let complete={ [weak self,weak s] (outcome:PasteOutcome)->Void in
             guard let self=self,let s=s else{return}
@@ -365,7 +402,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         PasteTarget.capture{[weak self] in guard let self=self,self.hotkey.enabled else{return nil};return self.hotkey.inputRevision}
     }
     func testPaste() {
-        guard active==nil,!stoppingCapture,!sessions.values.contains(where:{!$0.complete && $0.failure==nil}) else {pasteTestStatus="请先结束录音并等待识别完成。";return}
+        guard active==nil,!stoppingCapture,!sessions.values.contains(where:{(!$0.complete || $0.translationPending) && $0.failure==nil}) else {pasteTestStatus="请先结束录音并等待识别完成。";return}
         guard AutoPaste.authorized else {pasteTestStatus="请先允许自动粘贴权限。";return}
         pasteTestGeneration+=1;let generation=pasteTestGeneration,stopped=lastStoppedSession
         pasteTestRunning=true;pasteTestStatus="请在5秒内切到空白输入框，稍后填入测试文字。"
@@ -395,15 +432,17 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         }
         var state="准备好",text="",seconds=0.0,recording=false,retryable=false
         if let s=displayed {
-            text=s.text;recording=s.recording;retryable=s.failure != nil && !s.complete
+            text=s.outputText;recording=s.recording;retryable=s.failure != nil && !s.complete || s.englishOutput?.phase == .failed
             seconds=s.complete ? s.completedSeconds : s.seconds
-            if s.complete {state=s.deliveryStatus ?? "已完成"}
+            if s.translationPending {state=s.complete ? "正在翻译英文":"正在整理原文"}
+            else if s.englishOutput?.phase == .failed {state="翻译未完成 · 可重试";text=s.englishOutput?.error ?? s.text}
+            else if s.complete {state=s.deliveryStatus ?? "已完成"}
             else if s.failure != nil {state=s.recording ? "录音继续 · 识别断开" : "文字待补全"}
             else if s.recording {state=s.bridgeReady ? "聆听中" : "录音中 · 正在连接"}
             else {state="正在整理"}
         }
         capsule.applyTheme(capsuleThemes.resolved,palette:capsuleThemes.palette)
-        capsule.update(state:state,text:text,seconds:seconds,recording:recording,hotkey:hotkey.enabled,retryable:retryable,keyLabel:hotkey.shortcut.label)
+        capsule.update(state:state,text:text,seconds:seconds,recording:recording,hotkey:hotkey.enabled,retryable:retryable,keyLabel:hotkey.shortcut.label,retryLabel:displayed?.englishOutput?.phase == .failed ? "重试翻译（复制）":"重试识别",englishKey:active?.englishConfiguration?.shortcut.label)
         let summary=String(format:"本机  %d 次  ·  %d 字  ·  %.1f 分钟",history?.records.count ?? 0,history?.characters ?? 0,(history?.seconds ?? 0)/60)
         if stats.stringValue != summary {stats.stringValue=summary}
         var explanation:String
@@ -419,7 +458,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
     }
     @objc func showCapsule(){capsule.show()}
     func copyDisplayed() {
-        guard let text=displayed?.text,!text.isEmpty else{return}
+        guard let text=displayed?.outputText,!text.isEmpty else{return}
         autoPaste.clipboard.abandon()
         NSPasteboard.general.clearContents();NSPasteboard.general.setString(text,forType:.string)
     }
@@ -471,7 +510,7 @@ final class VoiceApp:NSObject,NSApplicationDelegate {
         do {for session in pendingSessions{try recovery.save(session)}} catch {
             let alert=NSAlert();alert.messageText="未完成录音尚未备份成功";alert.informativeText="为避免丢失音频，已取消退出。请检查可用空间后重试。";alert.addButton(withTitle:"继续使用");alert.runModal();return .terminateCancel
         }
-        workbench.stop();autoPaste.cancel();hotkey.stop();recorder.stop {} ;for s in sessions.values {s.bridge?.cancel()};return .terminateNow
+        workbench.stop();autoPaste.cancel();hotkey.stop();recorder.stop {} ;for s in sessions.values {s.englishOutput?.cancel();s.bridge?.cancel()};return .terminateNow
     }
 }
 let app=NSApplication.shared

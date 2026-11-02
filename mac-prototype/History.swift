@@ -6,6 +6,7 @@ struct VoiceRecord: Codable {
     let text: String
     let seconds: Double
     var application: String? = nil
+    var english: String? = nil
     var characters: Int { text.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.count }
 }
 
@@ -20,6 +21,12 @@ final class HistoryStore {
             records=try JSONDecoder().decode([VoiceRecord].self,from:Data(contentsOf:path))
             try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:path.path)
         }
+    }
+    func associateEnglish(_ id:UUID,_ text:String) throws {
+        guard let index=records.firstIndex(where:{$0.id==id}) else{return}
+        var copy=records;copy[index].english=text
+        let bytes=try JSONEncoder().encode(copy);try bytes.write(to:path,options:.atomic)
+        try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:path.path);records=copy
     }
     func append(_ record:VoiceRecord) throws {
         guard !record.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else{return}

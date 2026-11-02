@@ -55,7 +55,7 @@ def build(output):
     for path in search: common += ['--paths',path]
     run(common+['--windowed','--name','xiaoha-voice','--manifest',ROOT/'app.manifest','--icon',icon,ROOT/'main.py'])
     runtime=common+['--console','--name','xiaoha-runtime','--hidden-import','channel_probe','--hidden-import','volcengine_asr','--hidden-import','personalization',
-        '--hidden-import','keyring.backends.Windows','--hidden-import','keyring.backends.chainer','--collect-submodules','desktop',
+        '--hidden-import','keyring.backends.Windows','--hidden-import','keyring.backends.null','--hidden-import','keyring.backends.chainer','--collect-submodules','desktop',
         '--collect-submodules','uvicorn','--collect-submodules','python_socks','--collect-all','jieba','--collect-data','certifi','--collect-data','tzdata',ROOT/'runtime_entry.py']
     run(runtime)
     shutil.copytree(work/'dist/xiaoha-voice',output)
@@ -65,6 +65,9 @@ def build(output):
     shutil.copy2(stage/'toolkit.json',output/'toolkit.json')
     for name in ('README.md','dependencies.lock.json','requirements-windows.txt','THIRD-PARTY.md'):
         shutil.copy2(ROOT/name,output/name)
+    english_help=ROOT/'shared-preview/docs/ENGLISH_OUTPUT.md'
+    if not english_help.is_file():english_help=ROOT.parent/'docs/ENGLISH_OUTPUT.md'
+    shutil.copy2(english_help,output/'英文输出说明.md')
     shutil.copy2(icon,output/'小哈语音.ico');licenses(output)
     # A real runtime check exercises bundled Opus, without network or microphone.
     from xiaoha_windows.services import environment
@@ -79,7 +82,7 @@ def build(output):
     gui_result=json.loads(gui_check.read_text('utf-8'))
     if not all(gui_result.get(k) is True for k in ('qt','webengine','multimedia')): raise RuntimeError('桌面组件自检未通过')
     if list((output/'Data').iterdir()): raise RuntimeError('发布包必须保持空资料目录')
-    manifest={'version':'0.4.0-preview.1','platform':'Windows-x64','python':platform.python_version(),'upstream_sha256':UPSTREAM_SHA256,'opus':opus,'selfcheck':result,'gui_selfcheck':gui_result,'files':hashes(output)}
+    manifest={'version':'0.4.1-preview.1','platform':'Windows-x64','python':platform.python_version(),'upstream_sha256':UPSTREAM_SHA256,'opus':opus,'selfcheck':result,'gui_selfcheck':gui_result,'files':hashes(output)}
     (output/'distribution-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     archive=output.with_name(output.name+'.zip')
     if archive.exists(): raise ValueError('同名ZIP已存在；原包未覆盖')

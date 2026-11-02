@@ -1,7 +1,7 @@
 """Allowlisted, self-contained, data-free Windows source handoff."""
 from pathlib import Path
 import hashlib,json,zipfile
-from prepare_components import ROOT,UPSTREAM_SHA256
+from prepare_components import ROOT,UPSTREAM_SHA256,PREVIEW_OVERLAY
 
 TOP=['main.py','runtime_entry.py','prepare_components.py','vendor_opus.py','build_windows.py','verify_shared.py','package_source.py',
      'build.cmd','start-dev.cmd','app.manifest','requirements-windows.txt','dependencies.lock.json','README.md','THIRD-PARTY.md']
@@ -19,6 +19,10 @@ def build(destination):
         name=path.relative_to(ROOT).as_posix()
         if any(p in name.split('/') for p in ('Data','.venv','devkit','private','__pycache__')):raise ValueError('交接成员超出白名单')
         payload[name]=path.read_bytes()
+    for name in (*PREVIEW_OVERLAY,'docs/ENGLISH_OUTPUT.md'):
+        source=ROOT/'shared-preview'/name
+        if not source.is_file():source=ROOT.parent/name
+        payload['shared-preview/'+name]=source.read_bytes()
     manifest={name:hashlib.sha256(value).hexdigest() for name,value in payload.items()}
     destination.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(destination,'x',zipfile.ZIP_DEFLATED) as z:

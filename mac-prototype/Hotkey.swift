@@ -25,6 +25,10 @@ final class RightOptionMonitor {
     private var armed=false,used=false
     var shortcut=VoiceShortcut.standard {didSet{gesture.reset();armed=false;used=false}}
     var suspended=false {didSet{gesture.reset();armed=false;used=false}}
+    var englishShortcut:PanelShortcut? {didSet{englishGesture=englishShortcut.map{PanelGesture($0)}}}
+    private var englishGesture:PanelGesture?
+    var shouldStopEnglish:(()->Bool)?
+    var onStopEnglish:(()->Void)?
     var onToggle:(()->Void)?
     var onCancel:(()->Void)?
     var shouldCancel:(()->Bool)?
@@ -49,6 +53,11 @@ final class RightOptionMonitor {
             if type == .otherMouseUp && (3...31).contains(button){DispatchQueue.main.async{[weak self] in self?.onMouseCapture?(button)}}
             return (type == .otherMouseDown || type == .otherMouseUp) && (3...31).contains(button)
         }
+        if shouldStopEnglish?()==true,let english=englishGesture {
+            let result=english.handle(type,event)
+            if result.fire{DispatchQueue.main.async{[weak self] in self?.onStopEnglish?()};return true}
+            if result.consume{return true}
+        }else{englishGesture=englishShortcut.map{PanelGesture($0)}}
         if type == .keyDown && key==53 && event.getIntegerValueField(.keyboardEventAutorepeat)==0 && shouldCancel?()==true {
             DispatchQueue.main.async{[weak self] in self?.onCancel?()};return true
         }
@@ -85,7 +94,7 @@ final class RightOptionMonitor {
         let callback:CGEventTapCallBack={_,type,event,context in
             let owner=Unmanaged<RightOptionMonitor>.fromOpaque(context!).takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                owner.inputRevision &+= 1
+                owner.inputRevision &+= 1;owner.englishGesture=owner.englishShortcut.map{PanelGesture($0)}
                 if let tap=owner.tap{CGEvent.tapEnable(tap:tap,enable:true)}
             } else if owner.handle(type,event) && owner.canFilter {return nil}
             return Unmanaged.passUnretained(event)

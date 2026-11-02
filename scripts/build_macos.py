@@ -32,7 +32,7 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True)
     app = out / '小哈语音.app'
-    # The original native build source is preserved byte for byte.
+    # Build only these isolated preview sources; never inspect installed Data.
     run(sys.executable, ROOT / 'mac-prototype/build.py', '--output', app)
     command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
                '--onedir', '--name', 'xiaoha-runtime', '--distpath', out / 'Runtime',
@@ -60,7 +60,7 @@ def main():
         '-o', workbench / 'desktop/clipboard-macos', '-framework', 'AppKit')
     (out / 'Data').mkdir(mode=0o700)
     (out / 'Data/.keep').touch()
-    manifest = {'format': 1, 'name': '小哈语音', 'version': '0.3.8',
+    manifest = {'format': 1, 'name': '小哈语音', 'version': '0.4.1-preview.1',
                 'platform': 'macOS-arm64', 'data': 'Data',
                 'runtime': 'Runtime/xiaoha-runtime/xiaoha-runtime', 'cloud_deployed': False}
     (out / 'toolkit.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
@@ -87,10 +87,12 @@ def main():
             shutil.copy2(original, sources / original.name)
     shutil.copy2(ROOT / 'toolkit/runtime.py', sources / 'runtime.py')
     shutil.copy2(ROOT / 'docs/数据与恢复说明.md', out / '数据与恢复说明.md')
+    shutil.copy2(ROOT / 'docs/ENGLISH_OUTPUT.md', out / '英文输出说明.md')
     (out / '使用说明.md').write_text(
         '# 小哈语音工具包\n\n保留整个文件夹，双击“小哈语音.app”。首次请配置自己的识别通道与系统权限。\n'
-        'Data 是自己的记录与设置；本包不含个人资料。完整使用、构建与许可说明见项目仓库。\n')
-    print(json.dumps({'built': True, 'version': '0.3.8', 'build': '12',
+        '右Option启停原文；启用英文输出后，短按右Command结束为英文。先填写自己的翻译API，见英文输出说明。\n'
+        '本包与小哈工具使用独立程序身份和端口；请勿覆盖正在运行的旧工具目录。Data 是自己的记录与设置，本包不含个人资料。\n')
+    print(json.dumps({'built': True, 'version': '0.4.1-preview.1', 'build': '13',
                       'personal_data_copied': False, 'app_launched': False}, ensure_ascii=False))
 
 

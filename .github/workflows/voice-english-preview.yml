@@ -1,0 +1,68 @@
+name: Voice English preview
+on:
+  push:
+    branches: ['codex/voice-english-*']
+  workflow_dispatch:
+concurrency:
+  group: voice-english-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: windows
+    env:
+      PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+      PYTHONPATH: '${{ github.workspace }}/windows;${{ github.workspace }}/windows/devkit/Components/workbench;${{ github.workspace }}/windows/devkit/Components/engine'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: windows/requirements-windows.txt
+      - name: Install locked build dependencies
+        run: python -m pip install -r requirements-windows.txt
+      - name: Prepare verified components
+        run: python prepare_components.py
+      - name: Windows controller, delivery and UI regressions
+        run: python -m pytest -q --tb=short tests --junitxml=../artifacts/windows-tests.xml
+      - name: Frozen shared regressions on prepared Windows components
+        run: python verify_shared.py
+      - name: Translation service, secure owner and cancellation regressions
+        timeout-minutes: 3
+        run: python -m pytest -vv --tb=short -o faulthandler_timeout=45 ../sync-suite/tests/test_voice_english.py --junitxml=../artifacts/translation-tests.xml
+      - name: Translation settings UI (Windows key layout)
+        env:
+          XH_VOICE_WEB: '${{ github.workspace }}/windows/devkit/Components/workbench/web'
+          XH_VOICE_PLATFORM: windows
+        run: node ../sync-suite/tests/voice_english_ui.cjs
+      - name: Build clean Windows package and run frozen runtime checks
+        run: python build_windows.py --output ../artifacts/XiaohaVoice-0.4.1-preview.1-Windows-x64
+      - name: Packaged owner translation smoke (loopback and null vault only)
+        run: python ../scripts/check_packaged_translation.py ../artifacts/XiaohaVoice-0.4.1-preview.1-Windows-x64 --report ../artifacts/packaged-translation.json
+      - name: Upload preview package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: XiaohaVoice-English-Windows-x64
+          compression-level: 0
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Voice-English-test-reports
+          path: |
+            artifacts/*.xml
+            artifacts/packaged-translation.json
+          if-no-files-found: ignore
+          retention-days: 30

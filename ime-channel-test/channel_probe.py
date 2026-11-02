@@ -327,7 +327,7 @@ async def main(args):
         try:
             import keyring
             from volcengine_asr import transcribe as official_transcribe
-            credential=keyring.get_password('com.xiaoha.voice.asr','volcengine-streaming')
+            credential=keyring.get_password('com.xiaoha.voice.standalone.asr','volcengine-streaming')
             if not credential: raise ValueError('正式API尚未保存凭证，请在识别通道中配置')
             await official_transcribe(stdin_audio(), {**settings,'proxy':NETWORK.websocket_proxy()}, credential, emit)
         except Exception as exc:
